@@ -19,9 +19,8 @@ def call_with_retries(
             return operation()
         except requests.RequestException as exc:
             if retryable_exception is not None and not retryable_exception(exc):
-                consecutive_failures += 1
                 print_status(
-                    f"{label} failed (attempt {consecutive_failures}/{max_consecutive_failures}): {format_request_exception(exc)}"
+                    f"{label} failed: {format_request_exception(exc)}"
                 )
                 return None
             consecutive_failures += 1

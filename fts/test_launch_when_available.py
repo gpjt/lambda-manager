@@ -676,7 +676,7 @@ def test_falls_back_to_later_available_region_if_first_launch_region_fails():
     )
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
-        + r" Lambda launch in us-east-1 failed \(attempt 1/2\): 400 Client Error: Bad Request for url: http://127\.0\.0\.1:\d+/lambda/instance-operations/launch \| body: \{\"error\": \"region launch failed\"\}",
+        + r" Lambda launch in us-east-1 failed: 400 Client Error: Bad Request for url: http://127\.0\.0\.1:\d+/lambda/instance-operations/launch \| body: \{\"error\": \"region launch failed\"\}",
         stdout_lines[1],
     )
     assert re.fullmatch(
