@@ -19,6 +19,27 @@ def print_status(message: str) -> None:
     print(f"{datetime.now().isoformat(timespec='seconds')} {message}")
 
 
+def call_with_retries(
+    label: str,
+    operation,
+    *,
+    max_consecutive_failures: int,
+    retry_delay_seconds: float,
+):
+    consecutive_failures = 0
+    while True:
+        try:
+            return operation()
+        except requests.RequestException as exc:
+            consecutive_failures += 1
+            print_status(
+                f"{label} failed (attempt {consecutive_failures}/{max_consecutive_failures}): {exc}"
+            )
+            if consecutive_failures >= max_consecutive_failures:
+                return None
+            time.sleep(retry_delay_seconds)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lambda_manager")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -48,11 +69,24 @@ def main(argv: list[str] | None = None) -> int:
         poll_interval_seconds = float(
             os.environ.get("LAMBDA_MANAGER_POLL_INTERVAL_SECONDS", "60")
         )
+        retry_delay_seconds = float(
+            os.environ.get("LAMBDA_MANAGER_RETRY_DELAY_SECONDS", "1")
+        )
+        max_consecutive_failures = int(
+            os.environ.get("LAMBDA_MANAGER_MAX_CONSECUTIVE_FAILURES", "10")
+        )
         ssh_key_name = os.environ["LAMBDA_SSH_KEY_NAME"]
         chat_id = os.environ["TELEGRAM_CHAT_ID"]
 
         while True:
-            payload = fetch_instance_types()
+            payload = call_with_retries(
+                "Lambda API",
+                fetch_instance_types,
+                max_consecutive_failures=max_consecutive_failures,
+                retry_delay_seconds=retry_delay_seconds,
+            )
+            if payload is None:
+                return 1
             available_names = available_instance_type_names(payload)
             print_status(
                 "Available instance types: "
@@ -60,22 +94,31 @@ def main(argv: list[str] | None = None) -> int:
             )
             region_name = first_available_region_name(payload, args.instance_type_name)
             if region_name:
-                launch_response = launch_instance(
-                    region_name=region_name,
-                    instance_type_name=args.instance_type_name,
-                    ssh_key_name=ssh_key_name,
+                launch_response = call_with_retries(
+                    "Lambda API",
+                    lambda: launch_instance(
+                        region_name=region_name,
+                        instance_type_name=args.instance_type_name,
+                        ssh_key_name=ssh_key_name,
+                    ),
+                    max_consecutive_failures=max_consecutive_failures,
+                    retry_delay_seconds=retry_delay_seconds,
                 )
+                if launch_response is None:
+                    return 1
                 instance_id = launch_response["data"]["instance_ids"][0]
                 message = (
                     f"Launched {args.instance_type_name} in {region_name} as {instance_id}"
                 )
                 print_status(message)
-                try:
-                    send_message(chat_id=chat_id, text=message)
-                except requests.RequestException as exc:
-                    print_status(
-                        f"Telegram notification failed after launch: {exc}"
-                    )
+                notification_response = call_with_retries(
+                    "Telegram API",
+                    lambda: send_message(chat_id=chat_id, text=message),
+                    max_consecutive_failures=max_consecutive_failures,
+                    retry_delay_seconds=retry_delay_seconds,
+                )
+                if notification_response is None:
+                    return 1
                 return 0
             time.sleep(poll_interval_seconds)
 
