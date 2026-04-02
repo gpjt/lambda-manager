@@ -1,4 +1,7 @@
-from lambda_manager.instance_types import available_instance_type_names
+from lambda_manager.instance_types import (
+    available_instance_type_names,
+    instance_type_description_rows,
+)
 from lambda_manager.lambda_api import (
     DEFAULT_BASE_URL,
     available_region_names,
@@ -7,7 +10,10 @@ from lambda_manager.lambda_api import (
     first_available_region_name,
 )
 from lambda_manager.telegram import build_send_message_request
-from lambda_manager.cli import format_available_instance_types_status
+from lambda_manager.cli import (
+    format_available_instance_types_status,
+    format_instance_type_description_table,
+)
 
 
 def test_returns_only_instance_types_with_capacity_available():
@@ -130,4 +136,39 @@ def test_formats_available_instance_types_status_with_regions():
     assert format_available_instance_types_status(payload) == (
         "Available instance types: gpu_1x_h100_sxm5 (regions: us-west-1), "
         "gpu_2x_a6000 (regions: us-east-1)"
+    )
+
+
+def test_returns_instance_type_description_rows_sorted_by_description():
+    payload = {
+        "data": {
+            "gpu_2x_a6000": {
+                "instance_type": {"description": "2x A6000"}
+            },
+            "gpu_1x_h100_sxm5": {
+                "instance_type": {"description": "H100 SXM5"}
+            },
+            "gpu_1x_a10": {
+                "instance_type": {"description": "A10"}
+            },
+        }
+    }
+
+    assert instance_type_description_rows(payload) == [
+        ("2x A6000", "gpu_2x_a6000"),
+        ("A10", "gpu_1x_a10"),
+        ("H100 SXM5", "gpu_1x_h100_sxm5"),
+    ]
+
+
+def test_formats_instance_type_description_table():
+    rows = [
+        ("A10", "gpu_1x_a10"),
+        ("H100 SXM5", "gpu_1x_h100_sxm5"),
+    ]
+
+    assert format_instance_type_description_table(rows) == (
+        "description  name\n"
+        "A10          gpu_1x_a10\n"
+        "H100 SXM5    gpu_1x_h100_sxm5"
     )

@@ -6,7 +6,10 @@ from datetime import datetime
 import requests
 
 from lambda_manager.dotenv import load_dotenv
-from lambda_manager.instance_types import available_instance_type_names
+from lambda_manager.instance_types import (
+    available_instance_type_names,
+    instance_type_description_rows,
+)
 from lambda_manager.lambda_api import (
     available_region_names,
     fetch_instance_types,
@@ -41,6 +44,16 @@ def format_available_instance_types_status(payload: dict) -> str:
         )
 
     return "Available instance types: " + ", ".join(parts)
+
+
+def format_instance_type_description_table(
+    rows: list[tuple[str, str]],
+) -> str:
+    description_width = max(len("description"), *(len(description) for description, _ in rows))
+    lines = [f"{'description'.ljust(description_width)}  name"]
+    for description, name in rows:
+        lines.append(f"{description.ljust(description_width)}  {name}")
+    return "\n".join(lines)
 
 
 def call_with_retries(
@@ -84,6 +97,10 @@ def build_parser() -> argparse.ArgumentParser:
         "list-instance-types",
         help="List Lambda Labs instance types that currently have launch capacity",
     )
+    subparsers.add_parser(
+        "list-instance-type-descriptions",
+        help="List instance type descriptions together with their Lambda API names",
+    )
     launch_parser = subparsers.add_parser(
         "launch-when-available",
         help="Poll until a requested instance type has capacity, then launch and notify",
@@ -100,6 +117,11 @@ def main(argv: list[str] | None = None) -> int:
         payload = fetch_instance_types()
         for instance_type_name in available_instance_type_names(payload):
             print(instance_type_name)
+        return 0
+
+    if args.command == "list-instance-type-descriptions":
+        payload = fetch_instance_types()
+        print(format_instance_type_description_table(instance_type_description_rows(payload)))
         return 0
 
     if args.command == "launch-when-available":

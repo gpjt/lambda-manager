@@ -5,6 +5,7 @@
 Current features:
 
 - list instance types that are launchable right now
+- list human-readable instance descriptions together with Lambda API names
 - poll for a specific instance type
 - launch it automatically when capacity appears
 - send a Telegram notification after launch
@@ -48,10 +49,13 @@ From the repository root:
 
 ```bash
 uv run python -m lambda_manager list-instance-types
+uv run python -m lambda_manager list-instance-type-descriptions
 uv run python -m lambda_manager launch-when-available gpu_8x_a100_80gb_sxm4
 ```
 
-The polling command prints an ISO timestamp on each line, reports which instance types are currently launchable, and sends a Telegram message when it successfully launches an instance.
+`list-instance-type-descriptions` prints a table with the website-style description in one column and the Lambda API instance type name in the other, sorted by description.
+
+The polling command prints an ISO timestamp on each line, reports which instance types are currently launchable, includes available regions for each, and sends a Telegram message when it successfully launches an instance.
 
 ## Development
 
