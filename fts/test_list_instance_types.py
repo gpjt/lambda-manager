@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import threading
+from tempfile import TemporaryDirectory
 from urllib.parse import parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -159,6 +160,44 @@ def test_lists_only_instance_types_with_capacity_available():
             text=True,
             check=False,
         )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+    assert result.returncode == 0
+    assert result.stdout == "gpu_1x_h100_sxm5\ngpu_2x_a6000\n"
+    assert result.stderr == ""
+
+
+def test_list_instance_types_reads_configuration_from_dotenv_file():
+    server, thread = run_stub_server()
+    try:
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            (temp_path / ".env").write_text(
+                "\n".join(
+                    [
+                        "LAMBDA_API_KEY=test-api-key",
+                        f"LAMBDA_API_BASE_URL=http://127.0.0.1:{server.server_port}",
+                    ]
+                )
+                + "\n"
+            )
+
+            env = os.environ.copy()
+            env["PYTHONPATH"] = str(REPO_ROOT / "src")
+            env.pop("LAMBDA_API_KEY", None)
+            env.pop("LAMBDA_API_BASE_URL", None)
+
+            result = subprocess.run(
+                [sys.executable, "-m", "lambda_manager", "list-instance-types"],
+                cwd=temp_path,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
     finally:
         server.shutdown()
         server.server_close()

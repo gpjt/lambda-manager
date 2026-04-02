@@ -3,6 +3,7 @@ import os
 import time
 from datetime import datetime
 
+from lambda_manager.dotenv import load_dotenv
 from lambda_manager.instance_types import available_instance_type_names
 from lambda_manager.lambda_api import (
     fetch_instance_types,
@@ -32,6 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_dotenv()
     args = build_parser().parse_args(argv)
 
     if args.command == "list-instance-types":
