@@ -3,6 +3,8 @@ import os
 import time
 from datetime import datetime
 
+import requests
+
 from lambda_manager.dotenv import load_dotenv
 from lambda_manager.instance_types import available_instance_type_names
 from lambda_manager.lambda_api import (
@@ -67,8 +69,13 @@ def main(argv: list[str] | None = None) -> int:
                 message = (
                     f"Launched {args.instance_type_name} in {region_name} as {instance_id}"
                 )
-                send_message(chat_id=chat_id, text=message)
                 print_status(message)
+                try:
+                    send_message(chat_id=chat_id, text=message)
+                except requests.RequestException as exc:
+                    print_status(
+                        f"Telegram notification failed after launch: {exc}"
+                    )
                 return 0
             time.sleep(poll_interval_seconds)
 

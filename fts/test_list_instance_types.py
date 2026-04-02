@@ -127,6 +127,64 @@ class LaunchAndNotifyStubHandler(BaseHTTPRequestHandler):
         return
 
 
+class LaunchWithTelegramFailureStubHandler(BaseHTTPRequestHandler):
+    launch_requests = []
+    telegram_requests = []
+
+    def do_GET(self):
+        if self.path == "/lambda/instance-types":
+            response_body = {
+                "data": {
+                    "gpu_8x_a100_80gb_sxm4": {
+                        "instance_type": {"name": "gpu_8x_a100_80gb_sxm4"},
+                        "regions_with_capacity_available": [
+                            {"name": "us-east-1", "description": "Virginia, USA"}
+                        ],
+                    }
+                }
+            }
+            body = json.dumps(response_body).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        self.send_error(404)
+
+    def do_POST(self):
+        content_length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(content_length).decode("utf-8")
+
+        if self.path == "/lambda/instance-operations/launch":
+            self.__class__.launch_requests.append(json.loads(body))
+            response_body = {"data": {"instance_ids": ["instance-456"]}}
+            encoded = json.dumps(response_body).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+
+        if self.path.startswith("/telegram/botbot-token/sendMessage"):
+            self.__class__.telegram_requests.append(parse_qs(body))
+            response_body = {"ok": False, "description": "telegram unavailable"}
+            encoded = json.dumps(response_body).encode("utf-8")
+            self.send_response(503)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+
+        self.send_error(404)
+
+    def log_message(self, format, *args):
+        return
+
+
 def run_stub_server():
     server = ThreadingHTTPServer(("127.0.0.1", 0), LambdaStubHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -139,6 +197,17 @@ def run_launch_and_notify_stub_server():
     LaunchAndNotifyStubHandler.launch_requests = []
     LaunchAndNotifyStubHandler.telegram_requests = []
     server = ThreadingHTTPServer(("127.0.0.1", 0), LaunchAndNotifyStubHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, thread
+
+
+def run_launch_with_telegram_failure_stub_server():
+    LaunchWithTelegramFailureStubHandler.launch_requests = []
+    LaunchWithTelegramFailureStubHandler.telegram_requests = []
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", 0), LaunchWithTelegramFailureStubHandler
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
@@ -271,6 +340,73 @@ def test_launches_requested_instance_when_capacity_appears_and_notifies_telegram
             "chat_id": ["12345"],
             "text": [
                 "Launched gpu_8x_a100_80gb_sxm4 in us-east-1 as instance-123"
+            ],
+        }
+    ]
+
+
+def test_reports_launch_success_even_if_telegram_notification_fails():
+    server, thread = run_launch_with_telegram_failure_stub_server()
+    try:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        env["LAMBDA_API_KEY"] = "test-api-key"
+        env["LAMBDA_API_BASE_URL"] = f"http://127.0.0.1:{server.server_port}/lambda"
+        env["LAMBDA_SSH_KEY_NAME"] = "default-key"
+        env["TELEGRAM_BOT_TOKEN"] = "bot-token"
+        env["TELEGRAM_CHAT_ID"] = "12345"
+        env["TELEGRAM_API_BASE_URL"] = f"http://127.0.0.1:{server.server_port}/telegram"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "lambda_manager",
+                "launch-when-available",
+                "gpu_8x_a100_80gb_sxm4",
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+    assert result.returncode == 0
+    stdout_lines = result.stdout.splitlines()
+    assert len(stdout_lines) == 3
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX
+        + r" Available instance types: gpu_8x_a100_80gb_sxm4",
+        stdout_lines[0],
+    )
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX
+        + r" Launched gpu_8x_a100_80gb_sxm4 in us-east-1 as instance-456",
+        stdout_lines[1],
+    )
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX
+        + r" Telegram notification failed after launch: 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/telegram/botbot-token/sendMessage",
+        stdout_lines[2],
+    )
+    assert result.stderr == ""
+    assert LaunchWithTelegramFailureStubHandler.launch_requests == [
+        {
+            "region_name": "us-east-1",
+            "instance_type_name": "gpu_8x_a100_80gb_sxm4",
+            "ssh_key_names": ["default-key"],
+        }
+    ]
+    assert LaunchWithTelegramFailureStubHandler.telegram_requests == [
+        {
+            "chat_id": ["12345"],
+            "text": [
+                "Launched gpu_8x_a100_80gb_sxm4 in us-east-1 as instance-456"
             ],
         }
     ]
