@@ -1,5 +1,11 @@
 from lambda_manager.instance_types import available_instance_type_names
-from lambda_manager.lambda_api import DEFAULT_BASE_URL, build_request
+from lambda_manager.lambda_api import (
+    DEFAULT_BASE_URL,
+    build_instance_types_request,
+    build_launch_request,
+    first_available_region_name,
+)
+from lambda_manager.telegram import build_send_message_request
 
 
 def test_returns_only_instance_types_with_capacity_available():
@@ -26,9 +32,63 @@ def test_uses_current_lambda_cloud_api_base_url():
 
 
 def test_builds_request_with_basic_auth_and_user_agent():
-    request = build_request("test-api-key", "https://cloud.lambda.ai/api/v1")
+    request = build_instance_types_request(
+        "test-api-key", "https://cloud.lambda.ai/api/v1"
+    )
 
     assert request.full_url == "https://cloud.lambda.ai/api/v1/instance-types"
     assert request.get_header("Authorization") == "Basic dGVzdC1hcGkta2V5Og=="
     assert request.get_header("Accept") == "application/json"
     assert request.get_header("User-agent") == "lambda-manager/0.1"
+
+
+def test_returns_first_available_region_for_requested_instance_type():
+    payload = {
+        "data": {
+            "gpu_8x_a100_80gb_sxm4": {
+                "regions_with_capacity_available": [
+                    {"name": "us-east-1"},
+                    {"name": "us-west-1"},
+                ]
+            }
+        }
+    }
+
+    assert (
+        first_available_region_name(payload, "gpu_8x_a100_80gb_sxm4") == "us-east-1"
+    )
+
+
+def test_builds_launch_request():
+    request = build_launch_request(
+        api_key="test-api-key",
+        base_url="https://cloud.lambda.ai/api/v1",
+        region_name="us-east-1",
+        instance_type_name="gpu_8x_a100_80gb_sxm4",
+        ssh_key_name="default-key",
+    )
+
+    assert request.full_url == "https://cloud.lambda.ai/api/v1/instance-operations/launch"
+    assert request.get_method() == "POST"
+    assert request.get_header("Content-type") == "application/json"
+    assert request.data == (
+        b'{"region_name": "us-east-1", "instance_type_name": "gpu_8x_a100_80gb_sxm4", '
+        b'"ssh_key_names": ["default-key"]}'
+    )
+
+
+def test_builds_telegram_send_message_request():
+    request = build_send_message_request(
+        bot_token="bot-token",
+        chat_id="12345",
+        text="Launched gpu_8x_a100_80gb_sxm4 in us-east-1 as instance-123",
+        base_url="https://api.telegram.org",
+    )
+
+    assert request.full_url == "https://api.telegram.org/botbot-token/sendMessage"
+    assert request.get_method() == "POST"
+    assert request.get_header("Content-type") == "application/x-www-form-urlencoded"
+    assert (
+        request.data
+        == b"chat_id=12345&text=Launched+gpu_8x_a100_80gb_sxm4+in+us-east-1+as+instance-123"
+    )
