@@ -8,6 +8,9 @@ dependencies = [
     "requests>=2.32.0",
 ]
 
+[dependency-groups]
+dev = ["pytest>=9"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests", "fts"]
 pythonpath = ["src"]
