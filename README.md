@@ -1,14 +1,12 @@
 # lambda-manager
 
-`lambda-manager` is a small CLI for watching Lambda Cloud instance availability and launching an instance when capacity appears.
+`lambda-manager` is a Python CLI for working with Lambda Cloud instance types and automating instance launches.
 
-Current features:
+It currently does three things:
 
-- list instance types that are launchable right now
-- list human-readable instance descriptions together with Lambda API names
-- poll for a specific instance type
-- launch it automatically when capacity appears
-- send a Telegram notification after launch
+1. Show which instance types are launchable right now.
+2. Show the mapping between Lambda’s human-readable instance descriptions and the API instance type names.
+3. Poll for a specific instance type, launch it as soon as capacity appears, and send a Telegram notification.
 
 ## Requirements
 
@@ -18,9 +16,17 @@ Current features:
 - a Lambda Cloud SSH key name already registered with your account
 - a Telegram bot token and chat ID
 
+## Setup
+
+Install dependencies from the repository root:
+
+```bash
+uv sync
+```
+
 ## Configuration
 
-The CLI reads a `.env` file from the current working directory on startup.
+`lambda-manager` reads a `.env` file from the current working directory on startup.
 
 Example:
 
@@ -43,7 +49,7 @@ To use notifications, you need a bot token and a chat ID.
 - Forward that `/start` message to `@GetTheirIDBot`.
 - `@GetTheirIDBot` will tell you the chat ID to use as `TELEGRAM_CHAT_ID`.
 
-## Running the CLI
+## Commands
 
 From the repository root:
 
@@ -53,20 +59,58 @@ uv run python -m lambda_manager list-instance-type-descriptions
 uv run python -m lambda_manager launch-when-available gpu_8x_a100_80gb_sxm4
 ```
 
-`list-instance-type-descriptions` prints a table with the website-style description in one column and the Lambda API instance type name in the other, sorted by description.
+### `list-instance-types`
 
-The polling command prints an ISO timestamp on each line, reports which instance types are currently launchable, includes available regions for each, and sends a Telegram message when it successfully launches an instance.
+Prints the Lambda API instance type names that currently have launch capacity.
+
+Example output:
+
+```text
+gpu_1x_h100_sxm5
+gpu_2x_a6000
+```
+
+### `list-instance-type-descriptions`
+
+Prints a two-column table with the website-style description and the Lambda API instance type name, sorted by description.
+
+Example output:
+
+```text
+description  name
+2x A6000     gpu_2x_a6000
+A10          gpu_1x_a10
+H100 SXM5    gpu_1x_h100_sxm5
+```
+
+Use this when you know the description from the website but need the exact CLI/API name.
+
+### `launch-when-available <instance-type>`
+
+Polls Lambda Cloud until the requested instance type is available, tries the available regions in order, launches the instance, and sends a Telegram notification.
+
+The command:
+
+- prints ISO-timestamped status lines
+- shows all currently available instance types and their regions on each poll
+- retries transient Lambda and Telegram failures
+- skips regions that fail with non-retriable launch client errors
+
+Example:
+
+```bash
+uv run python -m lambda_manager launch-when-available gpu_8x_a100_80gb_sxm4
+```
 
 ## Development
 
-Install dependencies and run the test suite with:
+Run the test suite with:
 
 ```bash
-uv sync
 uv run pytest
 ```
 
-Tests follow the repository TDD approach:
+The project follows a TDD workflow:
 
 - functional tests live in `fts/`
 - unit tests live in `tests/`
