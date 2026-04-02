@@ -324,6 +324,50 @@ class RegionFallbackStubHandler(BaseHTTPRequestHandler):
         return
 
 
+class MalformedLaunchResponseStubHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/lambda/instance-types":
+            response_body = {
+                "data": {
+                    "gpu_8x_a100_80gb_sxm4": {
+                        "instance_type": {"name": "gpu_8x_a100_80gb_sxm4"},
+                        "regions_with_capacity_available": [
+                            {"name": "us-east-1", "description": "Virginia, USA"}
+                        ],
+                    }
+                }
+            }
+            body = json.dumps(response_body).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        self.send_error(404)
+
+    def do_POST(self):
+        if self.path == "/lambda/instance-operations/launch":
+            response_body = {"data": {"instance_ids": []}}
+            encoded = json.dumps(response_body).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+
+        if self.path.startswith("/telegram/botbot-token/sendMessage"):
+            self.send_error(500)
+            return
+
+        self.send_error(404)
+
+    def log_message(self, format, *args):
+        return
+
+
 def test_launches_requested_instance_when_capacity_appears_and_notifies_telegram():
     LaunchAndNotifyStubHandler.instance_type_requests = 0
     LaunchAndNotifyStubHandler.launch_requests = []
@@ -657,3 +701,50 @@ def test_falls_back_to_later_available_region_if_first_launch_region_fails():
             "ssh_key_names": ["default-key"],
         },
     ]
+
+
+def test_exits_cleanly_when_launch_response_has_no_instance_id():
+    server, thread = run_handler_server(MalformedLaunchResponseStubHandler)
+    try:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        env["LAMBDA_API_KEY"] = "test-api-key"
+        env["LAMBDA_API_BASE_URL"] = f"http://127.0.0.1:{server.server_port}/lambda"
+        env["LAMBDA_SSH_KEY_NAME"] = "default-key"
+        env["TELEGRAM_BOT_TOKEN"] = "bot-token"
+        env["TELEGRAM_CHAT_ID"] = "12345"
+        env["TELEGRAM_API_BASE_URL"] = f"http://127.0.0.1:{server.server_port}/telegram"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "lambda_manager",
+                "launch-when-available",
+                "gpu_8x_a100_80gb_sxm4",
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+    assert result.returncode == 1
+    stdout_lines = result.stdout.splitlines()
+    assert len(stdout_lines) == 2
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX
+        + r" Available instance types: gpu_8x_a100_80gb_sxm4 \(regions: us-east-1\)",
+        stdout_lines[0],
+    )
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX
+        + r" Lambda launch response did not include an instance id",
+        stdout_lines[1],
+    )
+    assert result.stderr == ""

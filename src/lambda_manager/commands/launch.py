@@ -14,6 +14,13 @@ from lambda_manager.retry import call_with_retries, is_retryable_launch_exceptio
 from lambda_manager.telegram import send_message
 
 
+def extract_instance_id(launch_response: dict) -> str | None:
+    instance_ids = launch_response.get("data", {}).get("instance_ids", [])
+    if not instance_ids:
+        return None
+    return instance_ids[0]
+
+
 def handle_launch_when_available(instance_type_name: str) -> int:
     poll_interval_seconds = float(
         os.environ.get("LAMBDA_MANAGER_POLL_INTERVAL_SECONDS", "60")
@@ -56,7 +63,10 @@ def handle_launch_when_available(instance_type_name: str) -> int:
                 )
                 if launch_response is None:
                     continue
-                instance_id = launch_response["data"]["instance_ids"][0]
+                instance_id = extract_instance_id(launch_response)
+                if instance_id is None:
+                    print_status("Lambda launch response did not include an instance id")
+                    return 1
                 message = (
                     f"Launched {instance_type_name} in {region_name} as {instance_id}"
                 )
