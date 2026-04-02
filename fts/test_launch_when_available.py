@@ -10,14 +10,10 @@ from fts.support import ISO_TIMESTAMP_PREFIX, REPO_ROOT, run_handler_server
 
 
 class LaunchAndNotifyStubHandler(BaseHTTPRequestHandler):
-    instance_type_requests = 0
-    launch_requests = []
-    telegram_requests = []
-
     def do_GET(self):
         if self.path == "/lambda/instance-types":
-            self.__class__.instance_type_requests += 1
-            if self.__class__.instance_type_requests == 1:
+            self.server.instance_type_requests += 1
+            if self.server.instance_type_requests == 1:
                 response_body = {
                     "data": {
                         "gpu_8x_a100_80gb_sxm4": {
@@ -52,7 +48,7 @@ class LaunchAndNotifyStubHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(content_length).decode("utf-8")
 
         if self.path == "/lambda/instance-operations/launch":
-            self.__class__.launch_requests.append(json.loads(body))
+            self.server.launch_requests.append(json.loads(body))
             response_body = {"data": {"instance_ids": ["instance-123"]}}
             encoded = json.dumps(response_body).encode("utf-8")
             self.send_response(200)
@@ -63,7 +59,7 @@ class LaunchAndNotifyStubHandler(BaseHTTPRequestHandler):
             return
 
         if self.path.startswith("/telegram/botbot-token/sendMessage"):
-            self.__class__.telegram_requests.append(parse_qs(body))
+            self.server.telegram_requests.append(parse_qs(body))
             response_body = {"ok": True, "result": {"message_id": 1}}
             encoded = json.dumps(response_body).encode("utf-8")
             self.send_response(200)
@@ -80,9 +76,6 @@ class LaunchAndNotifyStubHandler(BaseHTTPRequestHandler):
 
 
 class LaunchWithTelegramFailureStubHandler(BaseHTTPRequestHandler):
-    launch_requests = []
-    telegram_requests = []
-
     def do_GET(self):
         if self.path == "/lambda/instance-types":
             response_body = {
@@ -110,7 +103,7 @@ class LaunchWithTelegramFailureStubHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(content_length).decode("utf-8")
 
         if self.path == "/lambda/instance-operations/launch":
-            self.__class__.launch_requests.append(json.loads(body))
+            self.server.launch_requests.append(json.loads(body))
             response_body = {"data": {"instance_ids": ["instance-456"]}}
             encoded = json.dumps(response_body).encode("utf-8")
             self.send_response(200)
@@ -121,7 +114,7 @@ class LaunchWithTelegramFailureStubHandler(BaseHTTPRequestHandler):
             return
 
         if self.path.startswith("/telegram/botbot-token/sendMessage"):
-            self.__class__.telegram_requests.append(parse_qs(body))
+            self.server.telegram_requests.append(parse_qs(body))
             response_body = {"ok": False, "description": "telegram unavailable"}
             encoded = json.dumps(response_body).encode("utf-8")
             self.send_response(503)
@@ -138,12 +131,10 @@ class LaunchWithTelegramFailureStubHandler(BaseHTTPRequestHandler):
 
 
 class PollFailureThenSuccessStubHandler(BaseHTTPRequestHandler):
-    instance_type_requests = 0
-
     def do_GET(self):
         if self.path == "/lambda/instance-types":
-            self.__class__.instance_type_requests += 1
-            if self.__class__.instance_type_requests <= 2:
+            self.server.instance_type_requests += 1
+            if self.server.instance_type_requests <= 2:
                 response_body = {"error": "temporary failure"}
                 body = json.dumps(response_body).encode("utf-8")
                 self.send_response(503)
@@ -204,8 +195,6 @@ class PollFailureThenSuccessStubHandler(BaseHTTPRequestHandler):
 
 
 class TelegramFailureThresholdStubHandler(BaseHTTPRequestHandler):
-    telegram_requests = 0
-
     def do_GET(self):
         if self.path == "/lambda/instance-types":
             response_body = {
@@ -240,7 +229,7 @@ class TelegramFailureThresholdStubHandler(BaseHTTPRequestHandler):
             return
 
         if self.path.startswith("/telegram/botbot-token/sendMessage"):
-            self.__class__.telegram_requests += 1
+            self.server.telegram_requests += 1
             response_body = {"ok": False, "description": "telegram unavailable"}
             encoded = json.dumps(response_body).encode("utf-8")
             self.send_response(503)
@@ -257,8 +246,6 @@ class TelegramFailureThresholdStubHandler(BaseHTTPRequestHandler):
 
 
 class RegionFallbackStubHandler(BaseHTTPRequestHandler):
-    launch_requests = []
-
     def do_GET(self):
         if self.path == "/lambda/instance-types":
             response_body = {
@@ -288,7 +275,7 @@ class RegionFallbackStubHandler(BaseHTTPRequestHandler):
 
         if self.path == "/lambda/instance-operations/launch":
             payload = json.loads(body)
-            self.__class__.launch_requests.append(payload)
+            self.server.launch_requests.append(payload)
             if payload["region_name"] == "us-east-1":
                 response_body = {"error": "region launch failed"}
                 encoded = json.dumps(response_body).encode("utf-8")
@@ -369,10 +356,10 @@ class MalformedLaunchResponseStubHandler(BaseHTTPRequestHandler):
 
 
 def test_launches_requested_instance_when_capacity_appears_and_notifies_telegram():
-    LaunchAndNotifyStubHandler.instance_type_requests = 0
-    LaunchAndNotifyStubHandler.launch_requests = []
-    LaunchAndNotifyStubHandler.telegram_requests = []
-    server, thread = run_handler_server(LaunchAndNotifyStubHandler)
+    server, thread = run_handler_server(
+        LaunchAndNotifyStubHandler,
+        instance_type_requests=0, launch_requests=[], telegram_requests=[],
+    )
     try:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(REPO_ROOT / "src")
@@ -425,15 +412,15 @@ def test_launches_requested_instance_when_capacity_appears_and_notifies_telegram
         stdout_lines[3],
     )
     assert result.stderr == ""
-    assert LaunchAndNotifyStubHandler.instance_type_requests == 2
-    assert LaunchAndNotifyStubHandler.launch_requests == [
+    assert server.instance_type_requests == 2
+    assert server.launch_requests == [
         {
             "region_name": "us-east-1",
             "instance_type_name": "gpu_8x_a100_80gb_sxm4",
             "ssh_key_names": ["default-key"],
         }
     ]
-    assert LaunchAndNotifyStubHandler.telegram_requests == [
+    assert server.telegram_requests == [
         {
             "chat_id": ["12345"],
             "text": [
@@ -444,9 +431,10 @@ def test_launches_requested_instance_when_capacity_appears_and_notifies_telegram
 
 
 def test_reports_launch_success_before_exiting_on_telegram_failure():
-    LaunchWithTelegramFailureStubHandler.launch_requests = []
-    LaunchWithTelegramFailureStubHandler.telegram_requests = []
-    server, thread = run_handler_server(LaunchWithTelegramFailureStubHandler)
+    server, thread = run_handler_server(
+        LaunchWithTelegramFailureStubHandler,
+        launch_requests=[], telegram_requests=[],
+    )
     try:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(REPO_ROOT / "src")
@@ -496,14 +484,14 @@ def test_reports_launch_success_before_exiting_on_telegram_failure():
         stdout_lines[2],
     )
     assert result.stderr == ""
-    assert LaunchWithTelegramFailureStubHandler.launch_requests == [
+    assert server.launch_requests == [
         {
             "region_name": "us-east-1",
             "instance_type_name": "gpu_8x_a100_80gb_sxm4",
             "ssh_key_names": ["default-key"],
         }
     ]
-    assert LaunchWithTelegramFailureStubHandler.telegram_requests == [
+    assert server.telegram_requests == [
         {
             "chat_id": ["12345"],
             "text": [
@@ -514,8 +502,10 @@ def test_reports_launch_success_before_exiting_on_telegram_failure():
 
 
 def test_retries_lambda_poll_failures_and_recovers_before_threshold():
-    PollFailureThenSuccessStubHandler.instance_type_requests = 0
-    server, thread = run_handler_server(PollFailureThenSuccessStubHandler)
+    server, thread = run_handler_server(
+        PollFailureThenSuccessStubHandler,
+        instance_type_requests=0,
+    )
     try:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(REPO_ROOT / "src")
@@ -578,8 +568,10 @@ def test_retries_lambda_poll_failures_and_recovers_before_threshold():
 
 
 def test_exits_after_ten_consecutive_telegram_failures():
-    TelegramFailureThresholdStubHandler.telegram_requests = 0
-    server, thread = run_handler_server(TelegramFailureThresholdStubHandler)
+    server, thread = run_handler_server(
+        TelegramFailureThresholdStubHandler,
+        telegram_requests=0,
+    )
     try:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(REPO_ROOT / "src")
@@ -629,12 +621,14 @@ def test_exits_after_ten_consecutive_telegram_failures():
         stdout_lines[11],
     )
     assert result.stderr == ""
-    assert TelegramFailureThresholdStubHandler.telegram_requests == 10
+    assert server.telegram_requests == 10
 
 
 def test_falls_back_to_later_available_region_if_first_launch_region_fails():
-    RegionFallbackStubHandler.launch_requests = []
-    server, thread = run_handler_server(RegionFallbackStubHandler)
+    server, thread = run_handler_server(
+        RegionFallbackStubHandler,
+        launch_requests=[],
+    )
     try:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(REPO_ROOT / "src")
@@ -689,7 +683,7 @@ def test_falls_back_to_later_available_region_if_first_launch_region_fails():
         stdout_lines[3],
     )
     assert result.stderr == ""
-    assert RegionFallbackStubHandler.launch_requests == [
+    assert server.launch_requests == [
         {
             "region_name": "us-east-1",
             "instance_type_name": "gpu_8x_a100_80gb_sxm4",

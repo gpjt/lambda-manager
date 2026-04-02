@@ -51,8 +51,10 @@ class LambdaInventoryStubHandler(BaseHTTPRequestHandler):
         return
 
 
-def run_handler_server(handler_class):
+def run_handler_server(handler_class, **initial_state):
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler_class)
+    for key, value in initial_state.items():
+        setattr(server, key, value)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
