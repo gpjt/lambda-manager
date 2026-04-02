@@ -1,0 +1,8 @@
+[project]
+name = "lambda-manager"
+version = "0.1.0"
+description = "CLI helpers for managing Lambda Labs instances"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "fts"]
