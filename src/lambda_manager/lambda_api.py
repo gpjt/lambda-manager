@@ -43,15 +43,6 @@ def build_launch_request(
             "User-Agent": USER_AGENT,
         },
     )
-
-
-def first_available_region_name(payload: dict, instance_type_name: str) -> str | None:
-    regions = available_region_names(payload, instance_type_name)
-    if not regions:
-        return None
-    return regions[0]
-
-
 def available_region_names(payload: dict, instance_type_name: str) -> list[str]:
     instance_type = payload.get("data", {}).get(instance_type_name, {})
     regions = instance_type.get("regions_with_capacity_available", [])
