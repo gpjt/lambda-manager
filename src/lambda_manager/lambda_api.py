@@ -1,17 +1,18 @@
 import base64
-import json
 import os
-from urllib.request import Request, urlopen
+import requests
 
 
 DEFAULT_BASE_URL = "https://cloud.lambda.ai/api/v1"
 USER_AGENT = "lambda-manager/0.1"
+DEFAULT_TIMEOUT_SECONDS = 30
 
 
-def build_instance_types_request(api_key: str, base_url: str) -> Request:
+def build_instance_types_request(api_key: str, base_url: str) -> requests.Request:
     token = base64.b64encode(f"{api_key}:".encode("utf-8")).decode("ascii")
-    return Request(
-        f"{base_url.rstrip('/')}/instance-types",
+    return requests.Request(
+        method="GET",
+        url=f"{base_url.rstrip('/')}/instance-types",
         headers={
             "Authorization": f"Basic {token}",
             "Accept": "application/json",
@@ -26,25 +27,21 @@ def build_launch_request(
     region_name: str,
     instance_type_name: str,
     ssh_key_name: str,
-) -> Request:
+) -> requests.Request:
     token = base64.b64encode(f"{api_key}:".encode("utf-8")).decode("ascii")
-    body = json.dumps(
-        {
+    return requests.Request(
+        method="POST",
+        url=f"{base_url.rstrip('/')}/instance-operations/launch",
+        json={
             "region_name": region_name,
             "instance_type_name": instance_type_name,
             "ssh_key_names": [ssh_key_name],
-        }
-    ).encode("utf-8")
-    return Request(
-        f"{base_url.rstrip('/')}/instance-operations/launch",
-        data=body,
+        },
         headers={
             "Authorization": f"Basic {token}",
             "Accept": "application/json",
-            "Content-Type": "application/json",
             "User-Agent": USER_AGENT,
         },
-        method="POST",
     )
 
 
@@ -63,8 +60,10 @@ def fetch_instance_types(
     resolved_base_url = (base_url or os.environ.get("LAMBDA_API_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
     request = build_instance_types_request(resolved_api_key, resolved_base_url)
 
-    with urlopen(request) as response:
-        return json.load(response)
+    with requests.Session() as session:
+        response = session.send(request.prepare(), timeout=DEFAULT_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        return response.json()
 
 
 def launch_instance(
@@ -85,5 +84,7 @@ def launch_instance(
         ssh_key_name,
     )
 
-    with urlopen(request) as response:
-        return json.load(response)
+    with requests.Session() as session:
+        response = session.send(request.prepare(), timeout=DEFAULT_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        return response.json()

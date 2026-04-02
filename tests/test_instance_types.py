@@ -34,12 +34,12 @@ def test_uses_current_lambda_cloud_api_base_url():
 def test_builds_request_with_basic_auth_and_user_agent():
     request = build_instance_types_request(
         "test-api-key", "https://cloud.lambda.ai/api/v1"
-    )
+    ).prepare()
 
-    assert request.full_url == "https://cloud.lambda.ai/api/v1/instance-types"
-    assert request.get_header("Authorization") == "Basic dGVzdC1hcGkta2V5Og=="
-    assert request.get_header("Accept") == "application/json"
-    assert request.get_header("User-agent") == "lambda-manager/0.1"
+    assert request.url == "https://cloud.lambda.ai/api/v1/instance-types"
+    assert request.headers["Authorization"] == "Basic dGVzdC1hcGkta2V5Og=="
+    assert request.headers["Accept"] == "application/json"
+    assert request.headers["User-Agent"] == "lambda-manager/0.1"
 
 
 def test_returns_first_available_region_for_requested_instance_type():
@@ -66,12 +66,12 @@ def test_builds_launch_request():
         region_name="us-east-1",
         instance_type_name="gpu_8x_a100_80gb_sxm4",
         ssh_key_name="default-key",
-    )
+    ).prepare()
 
-    assert request.full_url == "https://cloud.lambda.ai/api/v1/instance-operations/launch"
-    assert request.get_method() == "POST"
-    assert request.get_header("Content-type") == "application/json"
-    assert request.data == (
+    assert request.url == "https://cloud.lambda.ai/api/v1/instance-operations/launch"
+    assert request.method == "POST"
+    assert request.headers["Content-Type"] == "application/json"
+    assert request.body == (
         b'{"region_name": "us-east-1", "instance_type_name": "gpu_8x_a100_80gb_sxm4", '
         b'"ssh_key_names": ["default-key"]}'
     )
@@ -83,12 +83,12 @@ def test_builds_telegram_send_message_request():
         chat_id="12345",
         text="Launched gpu_8x_a100_80gb_sxm4 in us-east-1 as instance-123",
         base_url="https://api.telegram.org",
-    )
+    ).prepare()
 
-    assert request.full_url == "https://api.telegram.org/botbot-token/sendMessage"
-    assert request.get_method() == "POST"
-    assert request.get_header("Content-type") == "application/x-www-form-urlencoded"
+    assert request.url == "https://api.telegram.org/botbot-token/sendMessage"
+    assert request.method == "POST"
+    assert request.headers["Content-Type"] == "application/x-www-form-urlencoded"
     assert (
-        request.data
-        == b"chat_id=12345&text=Launched+gpu_8x_a100_80gb_sxm4+in+us-east-1+as+instance-123"
+        request.body
+        == "chat_id=12345&text=Launched+gpu_8x_a100_80gb_sxm4+in+us-east-1+as+instance-123"
     )

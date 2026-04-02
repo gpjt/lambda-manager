@@ -1,7 +1,5 @@
-import json
 import os
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+import requests
 
 
 DEFAULT_TELEGRAM_API_BASE_URL = "https://api.telegram.org"
@@ -13,13 +11,11 @@ def build_send_message_request(
     chat_id: str,
     text: str,
     base_url: str,
-) -> Request:
-    body = urlencode({"chat_id": chat_id, "text": text}).encode("utf-8")
-    return Request(
-        f"{base_url.rstrip('/')}/bot{bot_token}/sendMessage",
-        data=body,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
+) -> requests.Request:
+    return requests.Request(
         method="POST",
+        url=f"{base_url.rstrip('/')}/bot{bot_token}/sendMessage",
+        data={"chat_id": chat_id, "text": text},
     )
 
 
@@ -41,5 +37,7 @@ def send_message(
         base_url=resolved_base_url,
     )
 
-    with urlopen(request) as response:
-        return json.load(response)
+    with requests.Session() as session:
+        response = session.send(request.prepare(), timeout=30)
+        response.raise_for_status()
+        return response.json()
