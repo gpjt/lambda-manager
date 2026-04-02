@@ -19,6 +19,15 @@ def print_status(message: str) -> None:
     print(f"{datetime.now().isoformat(timespec='seconds')} {message}", flush=True)
 
 
+def format_request_exception(exc: requests.RequestException) -> str:
+    message = str(exc)
+    response = getattr(exc, "response", None)
+    body = getattr(response, "text", None)
+    if body:
+        return f"{message} | body: {body}"
+    return message
+
+
 def format_available_instance_types_status(payload: dict) -> str:
     available_names = available_instance_type_names(payload)
     if not available_names:
@@ -50,12 +59,12 @@ def call_with_retries(
             if retryable_exception is not None and not retryable_exception(exc):
                 consecutive_failures += 1
                 print_status(
-                    f"{label} failed (attempt {consecutive_failures}/{max_consecutive_failures}): {exc}"
+                    f"{label} failed (attempt {consecutive_failures}/{max_consecutive_failures}): {format_request_exception(exc)}"
                 )
                 return None
             consecutive_failures += 1
             print_status(
-                f"{label} failed (attempt {consecutive_failures}/{max_consecutive_failures}): {exc}"
+                f"{label} failed (attempt {consecutive_failures}/{max_consecutive_failures}): {format_request_exception(exc)}"
             )
             if consecutive_failures >= max_consecutive_failures:
                 return None

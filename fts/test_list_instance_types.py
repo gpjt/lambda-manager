@@ -653,7 +653,7 @@ def test_reports_launch_success_before_exiting_on_telegram_failure():
     )
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
-        + r" Telegram API failed \(attempt 1/1\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/telegram/botbot-token/sendMessage",
+        + r" Telegram API failed \(attempt 1/1\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/telegram/botbot-token/sendMessage \| body: \{\"ok\": false, \"description\": \"telegram unavailable\"\}",
         stdout_lines[2],
     )
     assert result.stderr == ""
@@ -712,12 +712,12 @@ def test_retries_lambda_poll_failures_and_recovers_before_threshold():
     assert len(stdout_lines) == 5
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
-        + r" Lambda API failed \(attempt 1/3\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/lambda/instance-types",
+        + r" Lambda API failed \(attempt 1/3\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/lambda/instance-types \| body: \{\"error\": \"temporary failure\"\}",
         stdout_lines[0],
     )
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
-        + r" Lambda API failed \(attempt 2/3\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/lambda/instance-types",
+        + r" Lambda API failed \(attempt 2/3\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/lambda/instance-types \| body: \{\"error\": \"temporary failure\"\}",
         stdout_lines[1],
     )
     assert re.fullmatch(
@@ -784,7 +784,7 @@ def test_exits_after_ten_consecutive_telegram_failures():
     )
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
-        + r" Telegram API failed \(attempt 10/10\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/telegram/botbot-token/sendMessage",
+        + r" Telegram API failed \(attempt 10/10\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/telegram/botbot-token/sendMessage \| body: \{\"ok\": false, \"description\": \"telegram unavailable\"\}",
         stdout_lines[11],
     )
     assert result.stderr == ""
@@ -834,7 +834,7 @@ def test_falls_back_to_later_available_region_if_first_launch_region_fails():
     )
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
-        + r" Lambda launch in us-east-1 failed \(attempt 1/2\): 400 Client Error: Bad Request for url: http://127\.0\.0\.1:\d+/lambda/instance-operations/launch",
+        + r" Lambda launch in us-east-1 failed \(attempt 1/2\): 400 Client Error: Bad Request for url: http://127\.0\.0\.1:\d+/lambda/instance-operations/launch \| body: \{\"error\": \"region launch failed\"\}",
         stdout_lines[1],
     )
     assert re.fullmatch(
