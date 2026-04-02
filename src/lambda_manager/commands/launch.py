@@ -73,7 +73,7 @@ def handle_launch_when_available(instance_type_name: str) -> int:
                 print_status(message)
                 notification_response = call_with_retries(
                     "Telegram API",
-                    lambda: send_message(chat_id=chat_id, text=message),
+                    lambda message=message: send_message(chat_id=chat_id, text=message),
                     max_consecutive_failures=max_consecutive_failures,
                     retry_delay_seconds=retry_delay_seconds,
                 )
