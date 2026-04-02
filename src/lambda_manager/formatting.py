@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 
 import requests
 
@@ -6,8 +7,18 @@ from lambda_manager.instance_types import available_instance_type_names
 from lambda_manager.lambda_api import available_region_names
 
 
+MAX_LOGGED_RESPONSE_BODY_LENGTH = 200
+
+
 def print_status(message: str) -> None:
     print(f"{datetime.now().isoformat(timespec='seconds')} {message}", flush=True)
+
+
+def _compact_response_body(body: str) -> str:
+    compact = re.sub(r"\s+", " ", body).strip()
+    if len(compact) > MAX_LOGGED_RESPONSE_BODY_LENGTH:
+        return compact[: MAX_LOGGED_RESPONSE_BODY_LENGTH - 3] + "..."
+    return compact
 
 
 def format_request_exception(exc: requests.RequestException) -> str:
@@ -15,7 +26,7 @@ def format_request_exception(exc: requests.RequestException) -> str:
     response = getattr(exc, "response", None)
     body = getattr(response, "text", None)
     if body:
-        return f"{message} | body: {body}"
+        return f"{message} | body: {_compact_response_body(body)}"
     return message
 
 
