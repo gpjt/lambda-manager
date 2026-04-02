@@ -8,16 +8,20 @@ USER_AGENT = "lambda-manager/0.1"
 DEFAULT_TIMEOUT_SECONDS = 30
 
 
-def build_instance_types_request(api_key: str, base_url: str) -> requests.Request:
+def _auth_headers(api_key: str) -> dict:
     token = base64.b64encode(f"{api_key}:".encode("utf-8")).decode("ascii")
+    return {
+        "Authorization": f"Basic {token}",
+        "Accept": "application/json",
+        "User-Agent": USER_AGENT,
+    }
+
+
+def build_instance_types_request(api_key: str, base_url: str) -> requests.Request:
     return requests.Request(
         method="GET",
         url=f"{base_url.rstrip('/')}/instance-types",
-        headers={
-            "Authorization": f"Basic {token}",
-            "Accept": "application/json",
-            "User-Agent": USER_AGENT,
-        },
+        headers=_auth_headers(api_key),
     )
 
 
@@ -28,7 +32,6 @@ def build_launch_request(
     instance_type_name: str,
     ssh_key_name: str,
 ) -> requests.Request:
-    token = base64.b64encode(f"{api_key}:".encode("utf-8")).decode("ascii")
     return requests.Request(
         method="POST",
         url=f"{base_url.rstrip('/')}/instance-operations/launch",
@@ -37,11 +40,7 @@ def build_launch_request(
             "instance_type_name": instance_type_name,
             "ssh_key_names": [ssh_key_name],
         },
-        headers={
-            "Authorization": f"Basic {token}",
-            "Accept": "application/json",
-            "User-Agent": USER_AGENT,
-        },
+        headers=_auth_headers(api_key),
     )
 
 
