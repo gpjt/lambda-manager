@@ -28,5 +28,10 @@ Use `pytest` throughout. Functional tests in `fts/` should describe user-visible
 ## Commit & Pull Request Guidelines
 Use short imperative commit subjects such as `Add instance type description lookup command`. Keep commits small and aligned to a single red-green-refactor step when practical. Pull requests should summarize the user story, list the tests added or updated, and include the exact commands used to verify the change.
 
+## Preferences
+- Do not add Co-Authored-By lines to commit messages.
+- Prefer lambdas (with default-argument capture when needed) over functools.partial.
+- Do not add friendly error handling to hide stack traces; the project is under active development and raw tracebacks are more useful for debugging. Only wrap errors when there is a specific retry/recovery strategy.
+
 ## Configuration & Security
 Do not commit secrets, `.env` files, virtual environments, coverage artifacts, or local databases; those patterns are already ignored. Runtime configuration is normally loaded from a local `.env` file with keys such as `LAMBDA_API_KEY`, `LAMBDA_SSH_KEY_NAME`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`. Treat `LAMBDA_MANAGER_TEST_MAX_POLLS` as a test-only hook; do not rely on it for user-facing behavior. When adding integrations, document required settings and provide safe defaults for local test runs.
