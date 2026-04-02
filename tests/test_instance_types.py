@@ -1,11 +1,13 @@
 from lambda_manager.instance_types import available_instance_type_names
 from lambda_manager.lambda_api import (
     DEFAULT_BASE_URL,
+    available_region_names,
     build_instance_types_request,
     build_launch_request,
     first_available_region_name,
 )
 from lambda_manager.telegram import build_send_message_request
+from lambda_manager.cli import format_available_instance_types_status
 
 
 def test_returns_only_instance_types_with_capacity_available():
@@ -59,6 +61,24 @@ def test_returns_first_available_region_for_requested_instance_type():
     )
 
 
+def test_returns_all_available_regions_for_requested_instance_type():
+    payload = {
+        "data": {
+            "gpu_8x_a100_80gb_sxm4": {
+                "regions_with_capacity_available": [
+                    {"name": "us-east-1"},
+                    {"name": "us-west-1"},
+                ]
+            }
+        }
+    }
+
+    assert available_region_names(payload, "gpu_8x_a100_80gb_sxm4") == [
+        "us-east-1",
+        "us-west-1",
+    ]
+
+
 def test_builds_launch_request():
     request = build_launch_request(
         api_key="test-api-key",
@@ -91,4 +111,23 @@ def test_builds_telegram_send_message_request():
     assert (
         request.body
         == "chat_id=12345&text=Launched+gpu_8x_a100_80gb_sxm4+in+us-east-1+as+instance-123"
+    )
+
+
+def test_formats_available_instance_types_status_with_regions():
+    payload = {
+        "data": {
+            "gpu_2x_a6000": {
+                "regions_with_capacity_available": [{"name": "us-east-1"}]
+            },
+            "gpu_1x_h100_sxm5": {
+                "regions_with_capacity_available": [{"name": "us-west-1"}]
+            },
+            "gpu_1x_a10": {"regions_with_capacity_available": []},
+        }
+    }
+
+    assert format_available_instance_types_status(payload) == (
+        "Available instance types: gpu_1x_h100_sxm5 (regions: us-west-1), "
+        "gpu_2x_a6000 (regions: us-east-1)"
     )

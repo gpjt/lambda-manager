@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 from tempfile import TemporaryDirectory
 from urllib.parse import parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -304,6 +305,74 @@ class TelegramFailureThresholdStubHandler(BaseHTTPRequestHandler):
         return
 
 
+class RegionFallbackStubHandler(BaseHTTPRequestHandler):
+    launch_requests = []
+
+    def do_GET(self):
+        if self.path == "/lambda/instance-types":
+            response_body = {
+                "data": {
+                    "gpu_8x_a100_80gb_sxm4": {
+                        "instance_type": {"name": "gpu_8x_a100_80gb_sxm4"},
+                        "regions_with_capacity_available": [
+                            {"name": "us-east-1", "description": "Virginia, USA"},
+                            {"name": "us-west-1", "description": "California, USA"},
+                        ],
+                    }
+                }
+            }
+            body = json.dumps(response_body).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        self.send_error(404)
+
+    def do_POST(self):
+        content_length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(content_length).decode("utf-8")
+
+        if self.path == "/lambda/instance-operations/launch":
+            payload = json.loads(body)
+            self.__class__.launch_requests.append(payload)
+            if payload["region_name"] == "us-east-1":
+                response_body = {"error": "region launch failed"}
+                encoded = json.dumps(response_body).encode("utf-8")
+                self.send_response(503)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+
+            response_body = {"data": {"instance_ids": ["instance-fallback"]}}
+            encoded = json.dumps(response_body).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+
+        if self.path.startswith("/telegram/botbot-token/sendMessage"):
+            response_body = {"ok": True, "result": {"message_id": 1}}
+            encoded = json.dumps(response_body).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+
+        self.send_error(404)
+
+    def log_message(self, format, *args):
+        return
+
+
 def run_stub_server():
     server = ThreadingHTTPServer(("127.0.0.1", 0), LambdaStubHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -345,6 +414,14 @@ def run_telegram_failure_threshold_stub_server():
     server = ThreadingHTTPServer(
         ("127.0.0.1", 0), TelegramFailureThresholdStubHandler
     )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, thread
+
+
+def run_region_fallback_stub_server():
+    RegionFallbackStubHandler.launch_requests = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), RegionFallbackStubHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
@@ -414,6 +491,49 @@ def test_list_instance_types_reads_configuration_from_dotenv_file():
     assert result.stderr == ""
 
 
+def test_poll_output_shows_regions_for_all_available_instance_types():
+    server, thread = run_stub_server()
+    try:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        env["LAMBDA_API_KEY"] = "test-api-key"
+        env["LAMBDA_API_BASE_URL"] = f"http://127.0.0.1:{server.server_port}"
+        env["LAMBDA_SSH_KEY_NAME"] = "default-key"
+        env["TELEGRAM_BOT_TOKEN"] = "bot-token"
+        env["TELEGRAM_CHAT_ID"] = "12345"
+        env["LAMBDA_MANAGER_POLL_INTERVAL_SECONDS"] = "0.01"
+        env["LAMBDA_MANAGER_MAX_CONSECUTIVE_FAILURES"] = "1"
+        env["LAMBDA_MANAGER_MAX_POLLS"] = "1"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "lambda_manager",
+                "launch-when-available",
+                "gpu_1x_a10",
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+    assert result.returncode == 0
+    stdout_lines = result.stdout.splitlines()
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX
+        + r" Available instance types: gpu_1x_h100_sxm5 \(regions: us-west-1\), gpu_2x_a6000 \(regions: us-east-1\)",
+        stdout_lines[0],
+    )
+    assert result.stderr == ""
+
+
 def test_launches_requested_instance_when_capacity_appears_and_notifies_telegram():
     server, thread = run_launch_and_notify_stub_server()
     try:
@@ -448,20 +568,24 @@ def test_launches_requested_instance_when_capacity_appears_and_notifies_telegram
 
     assert result.returncode == 0
     stdout_lines = result.stdout.splitlines()
-    assert len(stdout_lines) == 3
+    assert len(stdout_lines) == 4
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX + r" Available instance types: none",
         stdout_lines[0],
     )
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
-        + r" Available instance types: gpu_8x_a100_80gb_sxm4",
+        + r" Available instance types: gpu_8x_a100_80gb_sxm4 \(regions: us-east-1\)",
         stdout_lines[1],
     )
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
         + r" Launched gpu_8x_a100_80gb_sxm4 in us-east-1 as instance-123",
         stdout_lines[2],
+    )
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX + r" Telegram notification sent",
+        stdout_lines[3],
     )
     assert result.stderr == ""
     assert LaunchAndNotifyStubHandler.instance_type_requests == 2
@@ -519,7 +643,7 @@ def test_reports_launch_success_before_exiting_on_telegram_failure():
     assert len(stdout_lines) == 3
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
-        + r" Available instance types: gpu_8x_a100_80gb_sxm4",
+        + r" Available instance types: gpu_8x_a100_80gb_sxm4 \(regions: us-east-1\)",
         stdout_lines[0],
     )
     assert re.fullmatch(
@@ -585,7 +709,7 @@ def test_retries_lambda_poll_failures_and_recovers_before_threshold():
 
     assert result.returncode == 0
     stdout_lines = result.stdout.splitlines()
-    assert len(stdout_lines) == 4
+    assert len(stdout_lines) == 5
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
         + r" Lambda API failed \(attempt 1/3\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/lambda/instance-types",
@@ -598,13 +722,17 @@ def test_retries_lambda_poll_failures_and_recovers_before_threshold():
     )
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
-        + r" Available instance types: gpu_8x_a100_80gb_sxm4",
+        + r" Available instance types: gpu_8x_a100_80gb_sxm4 \(regions: us-east-1\)",
         stdout_lines[2],
     )
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
         + r" Launched gpu_8x_a100_80gb_sxm4 in us-east-1 as instance-789",
         stdout_lines[3],
+    )
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX + r" Telegram notification sent",
+        stdout_lines[4],
     )
     assert result.stderr == ""
 
@@ -646,7 +774,7 @@ def test_exits_after_ten_consecutive_telegram_failures():
     assert len(stdout_lines) == 12
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
-        + r" Available instance types: gpu_8x_a100_80gb_sxm4",
+        + r" Available instance types: gpu_8x_a100_80gb_sxm4 \(regions: us-east-1\)",
         stdout_lines[0],
     )
     assert re.fullmatch(
@@ -661,3 +789,83 @@ def test_exits_after_ten_consecutive_telegram_failures():
     )
     assert result.stderr == ""
     assert TelegramFailureThresholdStubHandler.telegram_requests == 10
+
+
+def test_falls_back_to_later_available_region_if_first_launch_region_fails():
+    server, thread = run_region_fallback_stub_server()
+    try:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        env["LAMBDA_API_KEY"] = "test-api-key"
+        env["LAMBDA_API_BASE_URL"] = f"http://127.0.0.1:{server.server_port}/lambda"
+        env["LAMBDA_SSH_KEY_NAME"] = "default-key"
+        env["TELEGRAM_BOT_TOKEN"] = "bot-token"
+        env["TELEGRAM_CHAT_ID"] = "12345"
+        env["TELEGRAM_API_BASE_URL"] = f"http://127.0.0.1:{server.server_port}/telegram"
+        env["LAMBDA_MANAGER_RETRY_DELAY_SECONDS"] = "0.01"
+        env["LAMBDA_MANAGER_MAX_CONSECUTIVE_FAILURES"] = "2"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "lambda_manager",
+                "launch-when-available",
+                "gpu_8x_a100_80gb_sxm4",
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+    assert result.returncode == 0
+    stdout_lines = result.stdout.splitlines()
+    assert len(stdout_lines) == 5
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX
+        + r" Available instance types: gpu_8x_a100_80gb_sxm4 \(regions: us-east-1, us-west-1\)",
+        stdout_lines[0],
+    )
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX
+        + r" Lambda launch in us-east-1 failed \(attempt 1/2\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/lambda/instance-operations/launch",
+        stdout_lines[1],
+    )
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX
+        + r" Lambda launch in us-east-1 failed \(attempt 2/2\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/lambda/instance-operations/launch",
+        stdout_lines[2],
+    )
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX
+        + r" Launched gpu_8x_a100_80gb_sxm4 in us-west-1 as instance-fallback",
+        stdout_lines[3],
+    )
+    assert re.fullmatch(
+        ISO_TIMESTAMP_PREFIX + r" Telegram notification sent",
+        stdout_lines[4],
+    )
+    assert result.stderr == ""
+    assert RegionFallbackStubHandler.launch_requests == [
+        {
+            "region_name": "us-east-1",
+            "instance_type_name": "gpu_8x_a100_80gb_sxm4",
+            "ssh_key_names": ["default-key"],
+        },
+        {
+            "region_name": "us-east-1",
+            "instance_type_name": "gpu_8x_a100_80gb_sxm4",
+            "ssh_key_names": ["default-key"],
+        },
+        {
+            "region_name": "us-west-1",
+            "instance_type_name": "gpu_8x_a100_80gb_sxm4",
+            "ssh_key_names": ["default-key"],
+        },
+    ]
