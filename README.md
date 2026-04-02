@@ -33,6 +33,15 @@ LAMBDA_MANAGER_POLL_INTERVAL_SECONDS=60
 
 `LAMBDA_MANAGER_POLL_INTERVAL_SECONDS` is optional and defaults to `60`.
 
+## Telegram Setup
+
+To use notifications, you need a bot token and a chat ID.
+
+- Create a Telegram bot with `@BotFather` and keep the bot token it gives you.
+- Start a chat with your bot. Because this project does not listen for inbound messages, that will usually just send `/start` and nothing else will happen.
+- Forward that `/start` message to `@GetTheirIDBot`.
+- `@GetTheirIDBot` will tell you the chat ID to use as `TELEGRAM_CHAT_ID`.
+
 ## Running the CLI
 
 From the repository root:
