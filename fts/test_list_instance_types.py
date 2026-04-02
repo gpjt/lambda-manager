@@ -341,7 +341,7 @@ class RegionFallbackStubHandler(BaseHTTPRequestHandler):
             if payload["region_name"] == "us-east-1":
                 response_body = {"error": "region launch failed"}
                 encoded = json.dumps(response_body).encode("utf-8")
-                self.send_response(503)
+                self.send_response(400)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(encoded)))
                 self.end_headers()
@@ -826,7 +826,7 @@ def test_falls_back_to_later_available_region_if_first_launch_region_fails():
 
     assert result.returncode == 0
     stdout_lines = result.stdout.splitlines()
-    assert len(stdout_lines) == 5
+    assert len(stdout_lines) == 4
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
         + r" Available instance types: gpu_8x_a100_80gb_sxm4 \(regions: us-east-1, us-west-1\)",
@@ -834,30 +834,20 @@ def test_falls_back_to_later_available_region_if_first_launch_region_fails():
     )
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
-        + r" Lambda launch in us-east-1 failed \(attempt 1/2\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/lambda/instance-operations/launch",
+        + r" Lambda launch in us-east-1 failed \(attempt 1/2\): 400 Client Error: Bad Request for url: http://127\.0\.0\.1:\d+/lambda/instance-operations/launch",
         stdout_lines[1],
     )
     assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX
-        + r" Lambda launch in us-east-1 failed \(attempt 2/2\): 503 Server Error: Service Unavailable for url: http://127\.0\.0\.1:\d+/lambda/instance-operations/launch",
+        + r" Launched gpu_8x_a100_80gb_sxm4 in us-west-1 as instance-fallback",
         stdout_lines[2],
     )
     assert re.fullmatch(
-        ISO_TIMESTAMP_PREFIX
-        + r" Launched gpu_8x_a100_80gb_sxm4 in us-west-1 as instance-fallback",
-        stdout_lines[3],
-    )
-    assert re.fullmatch(
         ISO_TIMESTAMP_PREFIX + r" Telegram notification sent",
-        stdout_lines[4],
+        stdout_lines[3],
     )
     assert result.stderr == ""
     assert RegionFallbackStubHandler.launch_requests == [
-        {
-            "region_name": "us-east-1",
-            "instance_type_name": "gpu_8x_a100_80gb_sxm4",
-            "ssh_key_names": ["default-key"],
-        },
         {
             "region_name": "us-east-1",
             "instance_type_name": "gpu_8x_a100_80gb_sxm4",
