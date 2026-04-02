@@ -84,7 +84,7 @@ def test_poll_output_shows_regions_for_all_available_instance_types():
         env["TELEGRAM_CHAT_ID"] = "12345"
         env["LAMBDA_MANAGER_POLL_INTERVAL_SECONDS"] = "0.01"
         env["LAMBDA_MANAGER_MAX_CONSECUTIVE_FAILURES"] = "1"
-        env["LAMBDA_MANAGER_MAX_POLLS"] = "1"
+        env["LAMBDA_MANAGER_TEST_MAX_POLLS"] = "1"
 
         result = subprocess.run(
             [

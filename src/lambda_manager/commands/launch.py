@@ -18,7 +18,7 @@ def handle_launch_when_available(instance_type_name: str) -> int:
     poll_interval_seconds = float(
         os.environ.get("LAMBDA_MANAGER_POLL_INTERVAL_SECONDS", "60")
     )
-    max_polls = int(os.environ.get("LAMBDA_MANAGER_MAX_POLLS", "0"))
+    max_polls = int(os.environ.get("LAMBDA_MANAGER_TEST_MAX_POLLS", "0"))
     retry_delay_seconds = float(
         os.environ.get("LAMBDA_MANAGER_RETRY_DELAY_SECONDS", "1")
     )
