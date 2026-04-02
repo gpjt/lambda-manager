@@ -39,5 +39,3 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "launch-when-available":
         return handle_launch_when_available(args.instance_type_name)
-
-    return 1
