@@ -1,6 +1,7 @@
 import os
 import requests
 
+from lambda_manager.http import send_json_request
 
 DEFAULT_TELEGRAM_API_BASE_URL = "https://api.telegram.org"
 
@@ -36,8 +37,4 @@ def send_message(
         text=text,
         base_url=resolved_base_url,
     )
-
-    with requests.Session() as session:
-        response = session.send(request.prepare(), timeout=30)
-        response.raise_for_status()
-        return response.json()
+    return send_json_request(request)

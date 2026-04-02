@@ -3,9 +3,10 @@ import os
 import requests
 
 
+from lambda_manager.http import send_json_request
+
 DEFAULT_BASE_URL = "https://cloud.lambda.ai/api/v1"
 USER_AGENT = "lambda-manager/0.1"
-DEFAULT_TIMEOUT_SECONDS = 30
 
 
 def _auth_headers(api_key: str) -> dict:
@@ -56,11 +57,7 @@ def fetch_instance_types(
     resolved_api_key = api_key or os.environ["LAMBDA_API_KEY"]
     resolved_base_url = (base_url or os.environ.get("LAMBDA_API_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
     request = build_instance_types_request(resolved_api_key, resolved_base_url)
-
-    with requests.Session() as session:
-        response = session.send(request.prepare(), timeout=DEFAULT_TIMEOUT_SECONDS)
-        response.raise_for_status()
-        return response.json()
+    return send_json_request(request)
 
 
 def launch_instance(
@@ -80,8 +77,4 @@ def launch_instance(
         instance_type_name,
         ssh_key_name,
     )
-
-    with requests.Session() as session:
-        response = session.send(request.prepare(), timeout=DEFAULT_TIMEOUT_SECONDS)
-        response.raise_for_status()
-        return response.json()
+    return send_json_request(request)
