@@ -24,9 +24,11 @@ Install dependencies from the repository root:
 uv sync
 ```
 
+After `uv sync`, the project is installed from the top-level `src/` layout and exposes a `lambda-manager` command.
+
 ## Configuration
 
-`lambda-manager` reads a `.env` file from the current working directory on startup.
+`lambda-manager` reads a `.env` file from the current working directory on startup. In normal use, run commands from the repository root and keep `.env` there.
 
 Example:
 
@@ -54,9 +56,9 @@ To use notifications, you need a bot token and a chat ID.
 From the repository root:
 
 ```bash
-uv run python -m lambda_manager list-instance-types
-uv run python -m lambda_manager list-instance-type-descriptions
-uv run python -m lambda_manager launch-when-available gpu_8x_a100_80gb_sxm4
+uv run lambda-manager list-instance-types
+uv run lambda-manager list-instance-type-descriptions
+uv run lambda-manager launch-when-available gpu_8x_a100_80gb_sxm4
 ```
 
 ### `list-instance-types`

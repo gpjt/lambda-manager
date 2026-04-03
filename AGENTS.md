@@ -12,9 +12,9 @@ Examples:
 uv sync                                            # install project and dev dependencies
 uv run pytest tests fts                           # run the full suite
 uv run pytest fts/test_launch_when_available.py   # run launch workflow FTs
-uv run python -m lambda_manager list-instance-types
-uv run python -m lambda_manager list-instance-type-descriptions
-uv run python -m lambda_manager launch-when-available gpu_8x_a100_80gb_sxm4
+uv run lambda-manager list-instance-types
+uv run lambda-manager list-instance-type-descriptions
+uv run lambda-manager launch-when-available gpu_8x_a100_80gb_sxm4
 ```
 
 If you add a command, update both `README.md` and this file in the same change.
@@ -34,4 +34,4 @@ Use short imperative commit subjects such as `Add instance type description look
 - Do not add friendly error handling to hide stack traces; the project is under active development and raw tracebacks are more useful for debugging. Only wrap errors when there is a specific retry/recovery strategy.
 
 ## Configuration & Security
-Do not commit secrets, `.env` files, virtual environments, coverage artifacts, or local databases; those patterns are already ignored. Runtime configuration is normally loaded from a local `.env` file with keys such as `LAMBDA_API_KEY`, `LAMBDA_SSH_KEY_NAME`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`. Treat `LAMBDA_MANAGER_TEST_MAX_POLLS` as a test-only hook; do not rely on it for user-facing behavior. When adding integrations, document required settings and provide safe defaults for local test runs.
+Do not commit secrets, `.env` files, virtual environments, coverage artifacts, or local databases; those patterns are already ignored. Runtime configuration is normally loaded from a local `.env` file with keys such as `LAMBDA_API_KEY`, `LAMBDA_SSH_KEY_NAME`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`. The intended workflow is to run commands from the repository root and keep `.env` there. Treat `LAMBDA_MANAGER_TEST_MAX_POLLS` as a test-only hook; do not rely on it for user-facing behavior. When adding integrations, document required settings and provide safe defaults for local test runs.

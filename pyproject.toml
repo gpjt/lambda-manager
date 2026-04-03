@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
 [project]
 name = "lambda-manager"
 version = "0.1.0"
@@ -8,9 +12,15 @@ dependencies = [
     "requests>=2.32.0",
 ]
 
+[project.scripts]
+lambda-manager = "lambda_manager.cli:main"
+
 [dependency-groups]
 dev = ["pytest>=9"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "fts"]
 pythonpath = ["src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lambda_manager"]
